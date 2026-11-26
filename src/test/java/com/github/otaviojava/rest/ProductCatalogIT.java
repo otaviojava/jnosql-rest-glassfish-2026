@@ -84,7 +84,7 @@ class ProductCatalogIT {
                 assertTrue(page.getBoolean("hasNext"));
                 assertFalse(page.getBoolean("hasPrevious"));
                 assertTrue(page.getJsonNumber("totalElements").longValue() >= 2);
-                assertPublicProduct(page.getJsonArray("content").getJsonObject(0));
+                assertExclusions(page.getJsonArray("content").getJsonObject(0));
 
                 var second = send("GET", "?size=1&offset=1", null);
                 assertEquals(200, second.statusCode(), second.body());
@@ -93,6 +93,7 @@ class ProductCatalogIT {
                 assertTrue(next.getBoolean("hasPrevious"));
                 assertNotEquals(page.getJsonArray("content").getJsonObject(0).getString("id"),
                         next.getJsonArray("content").getJsonObject(0).getString("id"));
+                assertExclusions(next.getJsonArray("content").getJsonObject(0));
                 assertFalse(next.containsKey("totalElements"));
                 assertEquals(400, send("GET", "?size=0", null).statusCode());
 
@@ -144,6 +145,10 @@ class ProductCatalogIT {
         assertEquals("Keyco", product.getJsonObject("manufacturer").getString("name"));
         assertEquals(0, product.getJsonNumber("price").bigDecimalValue()
                 .compareTo(new java.math.BigDecimal("89.90")));
+        assertExclusions(product);
+    }
+
+    private static void assertExclusions(JsonObject product) {
         assertFalse(product.containsKey("supplier"));
         assertFalse(product.containsKey("supplierCost"));
         assertFalse(product.containsKey("internalNotes"));
