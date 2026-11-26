@@ -1,17 +1,17 @@
-= Eclipse JNoSQL REST: GlassFish + MongoDB
+= Eclipse JNoSQL REST with GlassFish and MongoDB
 :toc:
 :toclevels: 2
 :sectanchors:
 :source-highlighter: rouge
 
-Turn a Jakarta Data repository into an HTTP API without writing REST resource classes or DTO mappers.
-This example combines *Eclipse JNoSQL REST*, *GlassFish 9*, *MongoDB*, and *MapStruct* to demonstrate generated CRUD operations, pagination, nested documents, and dynamic queries.
+Build a REST API from a *Jakarta Data repository* without writing Jakarta REST resource classes or DTO mappers.
+This sample combines *Eclipse JNoSQL REST*, *GlassFish 9*, *MongoDB*, and *MapStruct* to demonstrate generated endpoints, pagination, nested documents, and dynamic searches with HTTP `QUERY`.
 
-*Define the repository. Generate the API. Keep control of the data you expose.*
+*One repository. A generated API. A real document database.*
 
 == Quickstart
 
-You need *Java 21*, *Docker Compose*, and internet access for Maven dependencies. The Maven wrapper is included; no GlassFish installation or `asadmin` commands are required.
+You need *Java 21*, *Docker*, and the included Maven wrapper. No local GlassFish installation or `asadmin` setup is required.
 
 [source,bash]
 ----
@@ -19,153 +19,53 @@ docker compose up -d
 ./mvnw clean package embedded-glassfish:run
 ----
 
-When the application is deployed, the configured API base URL is:
+Once GlassFish deploys the application, the intended API address is:
 
 http://localhost:8080/api/products[`http://localhost:8080/api/products`]
 
-NOTE: The Eclipse JNoSQL REST extension is currently consumed as `2.0.0-SNAPSHOT` from the https://central.sonatype.com/repository/maven-snapshots[Sonatype snapshots repository]. In the last recorded validation, that dependency could not be resolved, so the full build and deployed API are *not yet verified*. The startup commands above describe the intended project workflow, not a confirmed end-to-end run. See <<build-status,Build status and verification>>.
+NOTE: This example uses milestone GlassFish components and an Eclipse JNoSQL REST snapshot dependency. Its availability may depend on the snapshot repository or a locally built JNoSQL REST artifact. The last documented environment could start MongoDB and embedded GlassFish, but could not resolve `jnosql-rest-api:2.0.0-SNAPSHOT`; successful application deployment and HTTP execution were therefore not independently confirmed. The URLs and requests below describe the configured application contract.
 
-== What gets generated?
+== Start MongoDB
 
-You write a *Jakarta Data repository* describing the operations your application needs. The Eclipse JNoSQL REST annotation processor generates Jakarta REST resources and DTO contracts; MapStruct supplies the DTO mapping implementations.
+Use *one* of these alternatives.
 
-[cols="2,4",options="header"]
-|===
-| You define | The build generates
-| Repository operations | Jakarta REST resource methods and routes
-| `@RestDTO` field policies | Request and response DTOs, including nested types
-| Entity structure | MapStruct mapper interfaces and implementations
-| Pagination and restrictions | Paginated responses and a typed dynamic-search request
-| Optional OpenAPI annotations | API metadata when a compatible OpenAPI integration is available
-|===
+=== Option A — Docker Compose (recommended)
 
-=== Architecture
-
-The diagram distinguishes *build-time generation* from *runtime requests*; neither MapStruct nor the annotation processor is a standalone service.
-
-[source,mermaid]
-----
-%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EAF4FB','primaryTextColor':'#183B59','primaryBorderColor':'#1D5183','lineColor':'#1D5183','secondaryColor':'#F2F8FC','tertiaryColor':'#FFFFFF','fontFamily':'Arial'}}}%%
-flowchart LR
-    Repo["Jakarta Data<br/>Repository"] -->|compile time| Gen["Eclipse JNoSQL<br/>REST Generator"]
-    Gen --> Resource["Generated<br/>REST Resource"]
-    Gen --> DTO["DTOs + MapStruct<br/>Mapper"]
-    Client["HTTP Client"] -->|request| Resource
-    Resource -->|delegates| Repo
-    Repo -->|persists| Mongo[("MongoDB")]
-    Resource -.->|uses| DTO
-    classDef core fill:#EAF4FB,stroke:#1D5183,color:#183B59,stroke-width:2px;
-    classDef generated fill:#DEF4FC,stroke:#019DDC,color:#183B59,stroke-width:2px;
-    classDef external fill:#FFFFFF,stroke:#1D5183,color:#183B59,stroke-width:1.5px;
-    class Repo core;
-    class Gen,Resource,DTO generated;
-    class Client,Mongo external;
-----
-
-For a GitHub-rendered view, open link:architecture.md[the Mermaid architecture diagram]. The standalone editable source is link:architecture.mmd[`architecture.mmd`]. Brand colors: navy `#1D5183` and cyan `#019DDC`.
-
-IMPORTANT: GitHub's native Mermaid rendering is documented for *Markdown*, not AsciiDoc. This AsciiDoc block keeps the diagram readable and editable as source, but GitHub may display the Mermaid code rather than a rendered diagram. For a rendered preview on GitHub, open link:architecture.md[`architecture.md`], or use an Asciidoctor renderer with Mermaid support. No SVG image is required or referenced.
-
-== Try the Product API
-
-The generated routes follow the repository's annotated methods. The paths below include the configured `/api` application prefix.
-
-[cols="1,3,4",options="header"]
-|===
-| Method | Route | Behavior
-| `POST` | `/api/products` | Create a product
-| `GET` | `/api/products` | List products with pagination
-| `GET` | `/api/products/{id}` | Fetch a public product DTO
-| `DELETE` | `/api/products/{id}` | Delete a product by ID
-| `QUERY` | `/api/products/search` | Search using Jakarta Data restrictions
-|===
-
-=== Create and retrieve a product
-
-Create a product with nested manufacturer and supplier information:
+From the project directory:
 
 [source,bash]
 ----
-curl -i -X POST http://localhost:8080/api/products \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "name":"Keyboard",
-    "description":"Mechanical keyboard",
-    "category":"peripherals",
-    "price":89.90,
-    "manufacturer":{"name":"Keyco","country":"Brazil"},
-    "supplier":{"name":"Acme","accountManager":"Jane","contractReference":"C-1001"},
-    "supplierCost":55.00,
-    "internalNotes":"Negotiate volume discount"
-  }'
+docker compose up -d
+docker compose ps
 ----
 
-Copy the returned `id` and try:
+=== Option B — One Docker command
+
+If you prefer not to use Compose:
 
 [source,bash]
 ----
-curl http://localhost:8080/api/products/REPLACE_WITH_ID
-curl 'http://localhost:8080/api/products?size=10&offset=0&includeTotal=true'
+docker run -d --name jnosql-mongodb \
+  -p 127.0.0.1:27017:27017 \
+  -v jnosql-mongodb-data:/data/db \
+  mongo:8.0.16
 ----
 
-The *public response DTO* includes the product's manufacturer but excludes `supplier`, `supplierCost`, and `internalNotes`. Those attributes can still exist in the stored entity and in the creation request; DTO exclusions are not an authorization policy.
+Do not start both options simultaneously: they use the same local port.
+MongoDB listens on `localhost:27017`; the database `product_catalog` is created when data is first inserted.
 
-=== Pagination and dynamic search
+To stop MongoDB, run `docker compose down` for option A, or `docker stop jnosql-mongodb` for option B. Neither command removes the named data volume.
 
-The generated list endpoint accepts `size` (default 20; 1–100), `offset` (zero-based page offset; default 0), and `includeTotal` (default false). The response includes page content and navigation metadata; totals are included when requested.
-
-The repository also declares `Restriction<Product>`, which the generator maps to an *HTTP QUERY* endpoint:
+== Run GlassFish
 
 [source,bash]
 ----
-curl -i -X QUERY http://localhost:8080/api/products/search \
-  -H 'Content-Type: application/json' \
-  -d '{"category":{"eq":"peripherals"},"price":{"between":[50,100]}}'
+./mvnw clean package embedded-glassfish:run
 ----
 
-This request body is based on the current project's documented generated-search contract; verify it against the generated request type when snapshot dependencies are available. Some HTTP clients, proxies, and API documentation tools do not support the `QUERY` method. No GET/POST fallback is assumed.
+The Maven build compiles the repository, generates its Jakarta REST resources and MapStruct mappings, packages a WAR, and starts embedded GlassFish. Inspect the console output to confirm successful deployment before trying the requests below.
 
-To delete a product:
-
-[source,bash]
-----
-curl -i -X DELETE http://localhost:8080/api/products/REPLACE_WITH_ID
-----
-
-== How the repository works
-
-Start with link:src/main/java/com/github/otaviojava/rest/ProductRepository.java[`ProductRepository.java`]. It is a *custom repository*: it declares only the operations needed by the API rather than inheriting an entire CRUD surface.
-
-[cols="2,5",options="header"]
-|===
-| Annotation or type | Why it matters
-| `@Repository` | Declares a Jakarta Data repository
-| `@RestRepository` | Activates Eclipse JNoSQL REST resource generation
-| `@RestDTO` | Controls included fields in generated request and response contracts
-| `@Insert`, `@Find`, `@Delete` | Declare repository operations
-| `PageRequest` and `@OrderBy` | Enable ordered pagination
-| `Restriction<Product>` | Declares dynamically composed search criteria
-|===
-
-REST generation is an *Eclipse JNoSQL extension*, not something every Jakarta Data provider must implement.
-
-=== DTOs and nested documents
-
-The domain includes a `Product` entity and nested `Manufacturer` and `Supplier` embeddable records. The generated public DTO is intentionally different from the creation request:
-
-[cols="2,4",options="header"]
-|===
-| Generated representation | Data contract
-| `ProductCreateRequest` | Accepts product details and internal commercial information; excludes `id`
-| `ProductDTO` | Public product fields and manufacturer; excludes supplier, supplier cost, and internal notes
-| Nested DTOs | Represent manufacturer and supplier data according to the generated request/response shape
-|===
-
-MapStruct maps between entity objects and these DTOs at compile time. After a successful build, inspect `target/generated-sources/annotations/` to see what was generated. The MongoDB integration also uses an `ObjectIdConverter` for String-based IDs.
-
-== Configuration
-
-MongoDB is defined in `compose.yaml` and listens on local port `27017`. Data persists in a Docker volume. The application configuration is in `src/main/resources/META-INF/microprofile-config.properties`:
+The project configures MongoDB through `src/main/resources/META-INF/microprofile-config.properties`:
 
 [source,properties]
 ----
@@ -173,50 +73,196 @@ jnosql.document.database=product_catalog
 jnosql.mongodb.url=mongodb://localhost:27017
 ----
 
-Override with `JNOSQL_DOCUMENT_DATABASE` and `JNOSQL_MONGODB_URL` if needed. MongoDB creates the database and collection when the first record is stored.
+To change these settings, use the existing MicroProfile Config/environment-variable support documented by the application.
 
-To stop the database:
+== Try the generated API
+
+The endpoint paths include the application's `/api` prefix.
+
+[cols="1,3,4",options="header"]
+|===
+|HTTP method |Path |Purpose
+|`POST` |`/api/products` |Create a product
+|`GET` |`/api/products` |List products with pagination
+|`GET` |`/api/products/{id}` |Read a public product representation
+|`DELETE` |`/api/products/{id}` |Delete by ID
+|`QUERY` |`/api/products/search` |Search with dynamic Jakarta Data restrictions
+|===
+
+=== 1. Insert three products
+
+The creation request includes nested manufacturer and supplier data. Internal information is stored but omitted from public product responses.
+
+*Keyboard — peripherals, 89.90*
 
 [source,bash]
 ----
-docker compose down
+curl -i -X POST http://localhost:8080/api/products \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name":"Mechanical Keyboard",
+    "description":"Compact mechanical keyboard",
+    "category":"peripherals",
+    "price":89.90,
+    "manufacturer":{"name":"Keyco","country":"Portugal"},
+    "supplier":{"name":"SupplyCo","accountManager":"Ana","contractReference":"SUP-101"},
+    "supplierCost":54.00,
+    "internalNotes":"Volume discount available"
+  }'
 ----
 
-Do not use `docker compose down -v` unless you intend to delete the local database volume.
+*Mouse — peripherals, 39.90*
+
+[source,bash]
+----
+curl -i -X POST http://localhost:8080/api/products \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name":"Wireless Mouse",
+    "description":"Ergonomic wireless mouse",
+    "category":"peripherals",
+    "price":39.90,
+    "manufacturer":{"name":"Pointer Labs","country":"Ireland"},
+    "supplier":{"name":"SupplyCo","accountManager":"Ana","contractReference":"SUP-102"},
+    "supplierCost":21.00,
+    "internalNotes":"Internal stock review"
+  }'
+----
+
+*Monitor — displays, 249.90*
+
+[source,bash]
+----
+curl -i -X POST http://localhost:8080/api/products \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name":"24-inch Monitor",
+    "description":"High-resolution office monitor",
+    "category":"displays",
+    "price":249.90,
+    "manufacturer":{"name":"VisionTech","country":"Germany"},
+    "supplier":{"name":"Display Wholesale","accountManager":"Luis","contractReference":"SUP-103"},
+    "supplierCost":170.00,
+    "internalNotes":"Do not publish supplier pricing"
+  }'
+----
+
+Expect `201 Created` with a public product representation. Note one returned `id` for the lookup example.
+
+=== 2. List products and test pagination
+
+[source,bash]
+----
+curl 'http://localhost:8080/api/products?size=2&offset=0&includeTotal=true'
+----
+
+The response contains a `content` array, page navigation metadata, and—when requested—totals. Change `offset` to `1` to request the next page, since the offset here is a *page offset*, not a record index.
+
+[source,bash]
+----
+curl 'http://localhost:8080/api/products?size=2&offset=1&includeTotal=true'
+----
+
+Read an individual product using an ID returned by the insert operation:
+
+[source,bash]
+----
+curl http://localhost:8080/api/products/REPLACE_WITH_PRODUCT_ID
+----
+
+=== 3. Explore the HTTP QUERY method
+
+This example exposes `Restriction<Product>` as an HTTP `QUERY` endpoint. It is a read operation with a structured request body, not a conventional `GET` with many URL parameters.
+
+*Find peripherals:*
+
+[source,bash]
+----
+curl -i --request QUERY 'http://localhost:8080/api/products/search' \
+  -H 'Content-Type: application/json' \
+  --data '{"category":{"eq":"peripherals"}}'
+----
+
+*Find products in a price range:*
+
+[source,bash]
+----
+curl -i --request QUERY 'http://localhost:8080/api/products/search' \
+  -H 'Content-Type: application/json' \
+  --data '{"price":{"between":[50,100]}}'
+----
+
+*Combine category and price criteria:*
+
+[source,bash]
+----
+curl -i --request QUERY 'http://localhost:8080/api/products/search' \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "category":{"eq":"peripherals"},
+    "price":{"between":[50,100]}
+  }'
+----
+
+With the three example products, the intended results are: peripherals → Keyboard and Mouse; price 50–100 → Keyboard; combined criteria → Keyboard.
+
+IMPORTANT: The search bodies above are illustrative examples based on the earlier repository documentation. Confirm the request shape against the generated `ProductRepositorySearchRequest` and current REST-extension version before copying them into automated tests. HTTP `QUERY` support varies across clients and servers; these examples require a compatible version of `curl` and GlassFish/Jakarta REST support.
+
+=== 4. Delete a product
+
+[source,bash]
+----
+curl -i -X DELETE http://localhost:8080/api/products/REPLACE_WITH_PRODUCT_ID
+----
+
+The generated delete operation documents `204 No Content` on success.
+
+== Architecture
+
+This example separates *compile-time generation* from *runtime data access*.
+
+View the link:architecture.md[Mermaid architecture diagram] (rendered directly by GitHub). The editable source is link:architecture.mmd[`architecture.mmd`]. The diagram uses the navy `#1D5183` and cyan `#019DDC` brand palette.
+
+
+NOTE: GitHub renders Mermaid diagrams in Markdown, but not consistently in AsciiDoc. The linked `architecture.md` is provided for viewing; `architecture.mmd` keeps the diagram editable. No SVG is required.
+
+== How it works
+
+The custom link:src/main/java/com/github/otaviojava/rest/ProductRepository.java[`ProductRepository`] defines only the operations this API needs.
+
+[cols="2,5",options="header"]
+|===
+|Repository feature |What it provides
+|`@Repository` |Jakarta Data persistence contract
+|`@RestRepository` |Eclipse JNoSQL generated REST endpoints
+|`@RestDTO` |Separate creation and public response contracts
+|`@Insert`, `@Find`, `@Delete` |Declared persistence operations
+|`PageRequest` and `@OrderBy` |Ordered, paginated results
+|`Restriction<Product>` |Dynamically composed search criteria
+|===
+
+The `Product` entity embeds immutable `Manufacturer` and `Supplier` records. The generator produces request/response DTOs, and MapStruct implements their conversions.
+
+[cols="2,4",options="header"]
+|===
+|Representation |Exposed fields
+|`ProductCreateRequest` |Creation input including supplier information, excluding `id`
+|`ProductDTO` |Public product data and manufacturer, excluding supplier, supplier cost, and internal notes
+|===
+
+Inspect `target/generated-sources/annotations/` after a successful Maven build to see the generated resource and mappers.
+
+IMPORTANT: DTO exclusions control representation, not authorization. This local sample is not intended to be exposed as an unauthenticated production API.
 
 == OpenAPI support
 
-The Eclipse JNoSQL REST generator can emit MicroProfile OpenAPI annotations *when supported by the consuming runtime*. This GlassFish 9 milestone setup does **not** currently provide a verified MicroProfile OpenAPI endpoint, so do not expect `/openapi` to be available.
+MicroProfile OpenAPI is *not available in this GlassFish sample*. The REST endpoints can be generated and used independently, but this project does not provide an `/openapi` endpoint or Swagger UI.
 
-The core generated REST API does not depend on OpenAPI. Also note that OpenAPI 3.1 cannot natively describe an HTTP `QUERY` operation.
-
-== Tests and build status
-
-[source,bash]
-----
-# Build, including annotation processing
-./mvnw clean package
-
-# Integration suite (requires the local MongoDB instance)
-docker compose up -d --wait
-./mvnw -Pit clean verify
-----
-
-The current test suite includes generated-resource and mapper checks (`GeneratedApiTest`) and deployed HTTP/database checks (`ProductCatalogIT`). The integration tests cover persistence, pagination, DTO exclusions, nested documents, and HTTP QUERY.
-
-[[build-status]]
-=== Build status and verification
-
-The last recorded local validation confirmed *Java 21, Maven wrapper execution, Compose startup, MongoDB connectivity, and embedded GlassFish startup*. The full application build stopped because `jnosql-rest-api:2.0.0-SNAPSHOT` could not be resolved in that environment. Therefore successful WAR deployment, generated resource execution, MapStruct mappings, and HTTP tests remain unverified. A successful GlassFish boot by itself is not proof that the application deployed correctly.
-
-This project targets *GlassFish 9.0.0-M4*, a milestone rather than a production-stable platform. The embedded plugin is configured for a standard WAR deployment; the server is not bundled in the WAR.
-
-== Further reading
+== Learn more
 
 * https://www.jnosql.org/[Eclipse JNoSQL]
-* https://github.com/eclipse-jnosql/jnosql-extensions/tree/main/jnosql-rest[JNoSQL REST extension]
+* https://github.com/eclipse-jnosql/jnosql/issues/829[Eclipse JNoSQL REST extension]
 * https://jakarta.ee/specifications/data/[Jakarta Data]
-* https://github.com/eclipse-ee4j/glassfish/releases/tag/9.0.0-M4[GlassFish 9 milestone]
-* https://github.com/eclipse-ee4j/glassfish-maven-embedded-plugin[Embedded GlassFish Maven Plugin]
+* https://glassfish.org/[GlassFish]
+* https://www.mongodb.com/docs/[MongoDB]
 * https://mapstruct.org/[MapStruct]
-* https://github.com/otaviojava/jnosql-rest-openliberty-2026[Open Liberty + Oracle NoSQL reference sample]
