@@ -1,0 +1,6 @@
+flowchart LR
+    Repository["Jakarta Data Repository"] --> Generation["Eclipse JNoSQL REST generation"]
+    MapStruct["MapStruct"] -.-> Generation
+    OpenAPI["Optional OpenAPI annotations<br/>(not enabled)"] -.-> Generation
+    Generation --> Resource["Generated REST Resource"]
+    Resource --> Database["Eclipse JNoSQL / MongoDB"]
