@@ -1,6 +1,15 @@
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#EAF4FB','primaryTextColor':'#183B59','primaryBorderColor':'#1D5183','lineColor':'#1D5183','secondaryColor':'#F2F8FC','tertiaryColor':'#FFFFFF','fontFamily':'Arial'}}}%%
 flowchart LR
-    Repository["Jakarta Data Repository"] --> Generation["Eclipse JNoSQL REST generation"]
-    MapStruct["MapStruct"] -.-> Generation
-    OpenAPI["Optional OpenAPI annotations<br/>(not enabled)"] -.-> Generation
-    Generation --> Resource["Generated REST Resource"]
-    Resource --> Database["Eclipse JNoSQL / MongoDB"]
+    Repo["Jakarta Data<br/>Repository"] -->|compile time| Gen["Eclipse JNoSQL<br/>REST Generator"]
+    Gen --> Resource["Generated<br/>REST Resource"]
+    Gen --> DTO["DTOs + MapStruct<br/>Mapper"]
+    Client["HTTP Client"] -->|request| Resource
+    Resource -->|delegates| Repo
+    Repo -->|persists| Mongo[("MongoDB")]
+    Resource -.->|uses| DTO
+    classDef core fill:#EAF4FB,stroke:#1D5183,color:#183B59,stroke-width:2px;
+    classDef generated fill:#DEF4FC,stroke:#019DDC,color:#183B59,stroke-width:2px;
+    classDef external fill:#FFFFFF,stroke:#1D5183,color:#183B59,stroke-width:1.5px;
+    class Repo core;
+    class Gen,Resource,DTO generated;
+    class Client,Mongo external;
